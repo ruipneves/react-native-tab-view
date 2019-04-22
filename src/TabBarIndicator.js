@@ -8,35 +8,76 @@ import type { Route, SceneRendererProps, NavigationState } from './types';
 
 export type Props<T> = {|
   ...SceneRendererProps,
+  dynamicWidth?: boolean,
   navigationState: NavigationState<T>,
-  width: number,
   style?: ViewStyleProp,
+  tabWidths: number[],
+  width: number,
 |};
 
 export default function TabBarIndicator<T: Route>(props: Props<T>) {
-  const { width, position, navigationState, style } = props;
+  const {
+    dynamicWidth,
+    tabWidths,
+    width,
+    position,
+    navigationState,
+    style,
+  } = props;
   const { routes } = navigationState;
-  const translateX = Animated.multiply(
-    Animated.multiply(
+
+  let translateX = null;
+  let scaleX = 1;
+  let dynamicStyle = { width: `${100 / routes.length}%` };
+
+  if (dynamicWidth) {
+    let inputRange = [];
+    let translateOutputRange = [];
+    let scaleOutputRange = [];
+    let totalWidth = 0;
+    routes.forEach((route: Route, i: number) => {
+      if (i !== 0) {
+        totalWidth += tabWidths[i - 1];
+      }
+      inputRange.push(i);
+      translateOutputRange.push(totalWidth + tabWidths[i] * 0.5);
+      scaleOutputRange.push(tabWidths[i]);
+    });
+
+    translateX = Animated.interpolate(position, {
+      inputRange,
+      outputRange: translateOutputRange,
+      extrapolate: 'clamp',
+    });
+
+    scaleX = Animated.interpolate(position, {
+      inputRange,
+      outputRange: scaleOutputRange,
+      extrapolate: 'clamp',
+    });
+    dynamicStyle = { width: 1 };
+  } else {
+    translateX = Animated.multiply(
       Animated.interpolate(position, {
         inputRange: [0, routes.length - 1],
         outputRange: [0, routes.length - 1],
         extrapolate: 'clamp',
       }),
       width
-    ),
-    I18nManager.isRTL ? -1 : 1
-  );
+    );
+  }
+
+  translateX = Animated.multiply(translateX, I18nManager.isRTL ? -1 : 1);
 
   return (
     <Animated.View
       style={[
         styles.indicator,
-        { width: `${100 / routes.length}%` },
+        dynamicStyle,
         // If layout is not available, use `left` property for positioning the indicator
         // This avoids rendering delay until we are able to calculate translateX
         width
-          ? { transform: [{ translateX }] }
+          ? { transform: [{ translateX }, { scaleX }] }
           : { left: `${(100 / routes.length) * navigationState.index}%` },
         style,
       ]}

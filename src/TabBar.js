@@ -20,6 +20,7 @@ import type {
 
 export type Props<T> = {|
   ...SceneRendererProps,
+  dynamicWidth?: boolean,
   navigationState: NavigationState<T>,
   scrollEnabled?: boolean,
   bounces?: boolean,
@@ -53,8 +54,9 @@ export type Props<T> = {|
 |};
 
 type State = {|
-  scrollAmount: Animated.Value,
   initialOffset: ?{| x: number, y: number |},
+  scrollAmount: Animated.Value,
+  tabWidths: number[],
 |};
 
 export default class TabBar<T: Route> extends React.Component<Props<T>, State> {
@@ -79,7 +81,8 @@ export default class TabBar<T: Route> extends React.Component<Props<T>, State> {
     super(props);
 
     const initialOffset =
-      this.props.scrollEnabled && this.props.layout.width
+      this.props.scrollEnabled &&
+      (!this.props.dynamicWidth && this.props.layout.width)
         ? {
             x: this._getScrollAmount(
               this.props,
@@ -90,8 +93,9 @@ export default class TabBar<T: Route> extends React.Component<Props<T>, State> {
         : undefined;
 
     this.state = {
-      scrollAmount: new Animated.Value(0),
       initialOffset,
+      scrollAmount: new Animated.Value(0),
+      tabWidths: this.props.navigationState.routes.map(() => 0),
     };
   }
 
@@ -102,16 +106,20 @@ export default class TabBar<T: Route> extends React.Component<Props<T>, State> {
   }
 
   componentDidUpdate(prevProps: Props<T>) {
-    if (
-      prevProps.navigationState.routes.length !==
-        this.props.navigationState.routes.length ||
-      prevProps.layout.width !== this.props.layout.width
-    ) {
-      this._resetScroll(this.props.navigationState.index, false);
-    } else if (
-      prevProps.navigationState.index !== this.props.navigationState.index
-    ) {
+    if (this.props.dynamicWidth) {
       this._resetScroll(this.props.navigationState.index);
+    } else {
+      if (
+        prevProps.navigationState.routes.length !==
+          this.props.navigationState.routes.length ||
+        prevProps.layout.width !== this.props.layout.width
+      ) {
+        this._resetScroll(this.props.navigationState.index, false);
+      } else if (
+        prevProps.navigationState.index !== this.props.navigationState.index
+      ) {
+        this._resetScroll(this.props.navigationState.index);
+      }
     }
 
     if (prevProps.scrollEnabled !== this.props.scrollEnabled) {
@@ -165,6 +173,15 @@ export default class TabBar<T: Route> extends React.Component<Props<T>, State> {
 
   _normalizeScrollValue = (props, value) => {
     const { layout, navigationState } = props;
+
+    if (props.dynamicWidth) {
+      const dynamicTabBarWidth = this.state.tabWidths.reduce(
+        (acc: number, tabWidth: number) => acc + tabWidth,
+        0
+      );
+      return Math.max(Math.min(value, dynamicTabBarWidth - layout.width), 0);
+    }
+
     const tabWidth = this._getTabWidth(props);
     const tabBarWidth = Math.max(
       tabWidth * navigationState.routes.length,
@@ -177,6 +194,40 @@ export default class TabBar<T: Route> extends React.Component<Props<T>, State> {
 
   _getScrollAmount = (props, i) => {
     const { layout } = props;
+
+    if (props.dynamicWidth) {
+      const { tabWidths } = this.state;
+      const targetIndex =
+        i > props.navigationState.index &&
+        i < props.navigationState.routes.length
+          ? Math.ceil(i)
+          : Math.floor(i);
+      let dynamicAmount = tabWidths
+        .slice(0, targetIndex)
+        .reduce(
+          (acc: number, tabWidth: number) => (acc += tabWidth),
+          tabWidths[targetIndex] * 0.5
+        );
+
+      let diff =
+        tabWidths[targetIndex] * 0.5 +
+        tabWidths[props.navigationState.index] * 0.5;
+
+      if (i > props.navigationState.index) {
+        diff = diff * (targetIndex - i || 0.001);
+
+        dynamicAmount -= diff;
+      } else if (i < props.navigationState.index) {
+        diff = diff * (i - targetIndex || 0.001);
+        dynamicAmount += diff;
+      }
+
+      return this._normalizeScrollValue(
+        props,
+        dynamicAmount - layout.width / 2
+      );
+    }
+
     const tabWidth = this._getTabWidth(props);
     const centerDistance = tabWidth * (i + 1 / 2);
     const scrollAmount = centerDistance - layout.width / 2;
@@ -244,6 +295,7 @@ export default class TabBar<T: Route> extends React.Component<Props<T>, State> {
 
   render() {
     const {
+      dynamicWidth,
       position,
       layout,
       navigationState,
@@ -288,6 +340,8 @@ export default class TabBar<T: Route> extends React.Component<Props<T>, State> {
           ]}
         >
           {this.props.renderIndicator({
+            dynamicWidth,
+            tabWidths: this.state.tabWidths,
             position,
             layout,
             navigationState,
@@ -332,9 +386,20 @@ export default class TabBar<T: Route> extends React.Component<Props<T>, State> {
             contentOffset={this.state.initialOffset}
             ref={el => (this._scrollView = el && el.getNode())}
           >
-            {routes.map((route: T) => (
+            {routes.map((route: T, i: number) => (
               <TabBarItem
+                onLayout={({ nativeEvent: { layout } }) =>
+                  this.setState(prevState => {
+                    if (!dynamicWidth) return;
+                    const tabWidths = [...prevState.tabWidths];
+                    tabWidths[i] = layout.width || tabWidth;
+                    return {
+                      tabWidths,
+                    };
+                  })
+                }
                 key={route.key}
+                dynamicWidth={dynamicWidth}
                 position={position}
                 route={route}
                 tabWidth={tabWidth}

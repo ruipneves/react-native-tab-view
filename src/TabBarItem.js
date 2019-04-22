@@ -11,6 +11,7 @@ import type {
 import Animated from 'react-native-reanimated';
 
 type Props<T> = {|
+  dynamicWidth?: boolean,
   position: Animated.Node,
   route: T,
   navigationState: NavigationState<T>,
@@ -36,6 +37,7 @@ type Props<T> = {|
   renderBadge?: (scene: Scene<T>) => React.Node,
   onPress: () => mixed,
   onLongPress: () => mixed,
+  onLayout?: Function,
   tabWidth: number,
   labelStyle?: TextStyleProp,
   style: ViewStyleProp,
@@ -45,6 +47,7 @@ const DEFAULT_ACTIVE_COLOR = 'rgba(255, 255, 255, 1)';
 const DEFAULT_INACTIVE_COLOR = 'rgba(255, 255, 255, 0.7)';
 
 export default function TabBarItem<T: Route>({
+  dynamicWidth,
   route,
   position,
   navigationState,
@@ -65,6 +68,7 @@ export default function TabBarItem<T: Route>({
   tabWidth,
   onPress,
   onLongPress,
+  onLayout,
 }: Props<T>) {
   const tabIndex = navigationState.routes.indexOf(route);
   const isFocused = navigationState.index === tabIndex;
@@ -166,7 +170,7 @@ export default function TabBarItem<T: Route>({
     scrollEnabled === true;
 
   const tabContainerStyle = {};
-  const itemStyle = isWidthSet ? { width: tabWidth } : null;
+  const itemStyle = isWidthSet && !dynamicWidth ? { width: tabWidth } : null;
 
   if (tabStyle && typeof tabStyle.flex === 'number') {
     tabContainerStyle.flex = tabStyle.flex;
@@ -187,6 +191,7 @@ export default function TabBarItem<T: Route>({
 
   return (
     <TouchableItem
+      onLayout={onLayout}
       borderless
       testID={getTestID(scene)}
       accessible={getAccessible(scene)}
