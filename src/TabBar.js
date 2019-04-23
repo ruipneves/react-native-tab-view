@@ -199,7 +199,7 @@ export default class TabBar<T: Route> extends React.Component<Props<T>, State> {
       const { tabWidths } = this.state;
       const targetIndex =
         i > props.navigationState.index &&
-        i < props.navigationState.routes.length
+        i < props.navigationState.routes.length - 1
           ? Math.ceil(i)
           : Math.floor(i);
       let dynamicAmount = tabWidths
